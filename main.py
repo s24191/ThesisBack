@@ -6,13 +6,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from shared.auth.user_binding import fastapi_users, auth_backend
 from shared.database import init_db
-from features.users.register.endpoint import router as register_router
-from features.users.login.endpoint import router as login_router
 from shared.schemas.user import UserRead, UserCreate, UserUpdate
 from fastapi.middleware.cors import CORSMiddleware
 
 @asynccontextmanager
-async def lifespan():
+async def lifespan(app: FastAPI):
     await init_db()
     yield
 app = FastAPI(lifespan=lifespan)
@@ -42,9 +40,6 @@ app.include_router(
     prefix="/auth/users",
     tags=["users"],
 )
-
-app.include_router(register_router)
-app.include_router(login_router)
 
 @app.get("/")
 async def root():
