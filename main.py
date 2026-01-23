@@ -5,18 +5,28 @@ load_dotenv()
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from shared.auth.user_binding import fastapi_users, auth_backend
-from shared.database import init_db
+from shared.database import init_db, seed_db_from_csv
 from shared.schemas.user import UserRead, UserCreate, UserUpdate
 from fastapi.middleware.cors import CORSMiddleware
+from features.wines.endpoints import router as wines_router
+from features.wines.list_dbo import router as wines_list_router
+import os
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+
+    if os.getenv("RUN_SEED", "false").lower() == "true":
+        await seed_db_from_csv()
+
     yield
+
+origins = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
+
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -31,6 +41,7 @@ app.include_router(
     prefix="/auth",
     tags=["auth"],
 )
+app.include_router(wines_list_router)
 
 app.include_router(
     fastapi_users.get_users_router(
@@ -40,6 +51,7 @@ app.include_router(
     prefix="/auth/users",
     tags=["users"],
 )
+app.include_router(wines_router)
 
 @app.get("/")
 async def root():

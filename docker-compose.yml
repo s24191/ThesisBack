@@ -1,3 +1,5 @@
+version: "3.8"
+
 services:
   db:
     image: postgres:17-alpine
@@ -10,6 +12,18 @@ services:
       - pgdata:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+
+  backend:
+    build: .
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://wine_user:wine_password@db:5432/wine_db
+      CORS_ORIGINS: http://localhost:5173
+      # RUN_SEED: "false"   # or "true" if you want CSV seeding here
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
 
 volumes:
   pgdata:

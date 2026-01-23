@@ -1,9 +1,9 @@
 import os
-
+from sqlmodel import SQLModel
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from shared.models.base import Base
+from shared.seed.wine_seed import seed_wines_from_csvs
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:password@localhost:5432/wine_db")
 
@@ -15,10 +15,23 @@ async_session_maker = sessionmaker(
     expire_on_commit=False,
 )
 
+AsyncSessionLocal = sessionmaker(
+    engine, class_=AsyncSession, expire_on_commit=False
+)
+
+
 async def get_session() -> AsyncSession:
-    async with (async_session_maker() as session):
+    async with AsyncSessionLocal() as session:
         yield session
 
-async def init_db():
+
+async def init_db() -> None:
+    from shared.models import user # noqa: F401
+    from shared.models import wine as models_wine  # noqa: F401
+
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(SQLModel.metadata.create_all)
+
+async def seed_db_from_csv() -> None:
+    async with async_session_maker() as session:
+        await seed_wines_from_csvs(session)

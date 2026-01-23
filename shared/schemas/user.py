@@ -2,7 +2,7 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi_users import schemas
-from pydantic import EmailStr, constr
+from pydantic import EmailStr, constr, ConfigDict
 
 
 class UserRead(schemas.BaseUser[UUID]):
@@ -12,8 +12,7 @@ class UserRead(schemas.BaseUser[UUID]):
     filter_setting: Optional[str] = None
     filter_active: bool
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserCreate(schemas.BaseUserCreate):
@@ -31,5 +30,4 @@ class UserUpdate(schemas.BaseUserUpdate):
     filter_setting: Optional[str] = None
     filter_active: Optional[bool] = None
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
