@@ -85,7 +85,7 @@ async def get_similar_wines(
     res = await session.execute(stmt)
     rows = res.all()
 
-    # 3) score candidates by: same taste, shared grapes, name similarity
+    # score candidates by: same taste, shared grapes, name similarity
 
 
     def norm_name(s: str) -> str:
