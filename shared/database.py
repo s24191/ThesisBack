@@ -5,7 +5,7 @@ from sqlalchemy.orm import sessionmaker
 
 from shared.seed.wine_seed import seed_wines_from_csvs
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:password@localhost:5432/wine_db")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://wine_user:wine_password@localhost:5432/wine_db")
 
 engine = create_async_engine(DATABASE_URL, echo=True)
 
