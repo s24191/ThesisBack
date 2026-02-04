@@ -15,7 +15,27 @@ from shared.models.wine import (
 )
 from shared.schemas.wine_list import WineListItem, WineOffer
 
-router = APIRouter(prefix="/wines", tags=["wines-list"])
+router = APIRouter(prefix="/wines", tags=["wines"])
+
+@router.get("/countries", response_model=List[str])
+async def list_countries(session: AsyncSession = Depends(get_session)):
+    result = await session.execute(select(Country.name).order_by(Country.name))
+    return [row[0] for row in result.all()]
+
+
+@router.get("/regions", response_model=List[str])
+async def list_regions(
+    country: Optional[str] = Query(None),
+    session: AsyncSession = Depends(get_session),
+):
+    stmt = select(Region.name).order_by(Region.name)
+    if country:
+        stmt = (
+            stmt.join(Country, Country.id == Region.country_id)
+            .where(Country.name == country)
+        )
+    result = await session.execute(stmt)
+    return [row[0] for row in result.all()]
 
 
 @router.get("/", response_model=List[WineListItem])
@@ -95,22 +115,3 @@ async def list_wines_dbo(
 
     return list(wines_map.values())
 
-@router.get("/countries", response_model=List[str])
-async def list_countries(session: AsyncSession = Depends(get_session)):
-    result = await session.execute(select(Country.name).order_by(Country.name))
-    return [row[0] for row in result.all()]
-
-
-@router.get("/regions", response_model=List[str])
-async def list_regions(
-    country: Optional[str] = Query(None),
-    session: AsyncSession = Depends(get_session),
-):
-    stmt = select(Region.name).order_by(Region.name)
-    if country:
-        stmt = (
-            stmt.join(Country, Country.id == Region.country_id)
-            .where(Country.name == country)
-        )
-    result = await session.execute(stmt)
-    return [row[0] for row in result.all()]

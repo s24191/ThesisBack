@@ -1,6 +1,7 @@
 from typing import Optional, List
 from sqlmodel import SQLModel, Field, Relationship
 from shared.models.base import Base
+from shared.models.comment import WineComment
 
 
 class Country(Base, table=True):
@@ -106,5 +107,8 @@ class Wine(Base, table=True):
 
     grapes_link: List[WineGrapeLink] = Relationship(back_populates="wine")
     retailer_offers: List[RetailerWine] = Relationship(
+        back_populates="wine"
+    )
+    comments: List[WineComment] = Relationship(  # NEW
         back_populates="wine"
     )

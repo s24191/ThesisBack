@@ -10,6 +10,8 @@ from shared.schemas.user import UserRead, UserCreate, UserUpdate
 from fastapi.middleware.cors import CORSMiddleware
 from features.wines.endpoints import router as wines_router
 from features.wines.list_dbo import router as wines_list_router
+from features.wines.comments_endpoints import router as wine_comments_router
+
 import os
 
 @asynccontextmanager
@@ -41,7 +43,6 @@ app.include_router(
     prefix="/auth",
     tags=["auth"],
 )
-app.include_router(wines_list_router)
 
 app.include_router(
     fastapi_users.get_users_router(
@@ -51,7 +52,10 @@ app.include_router(
     prefix="/auth/users",
     tags=["users"],
 )
+app.include_router(wines_list_router)
+
 app.include_router(wines_router)
+app.include_router(wine_comments_router)
 
 @app.get("/")
 async def root():
