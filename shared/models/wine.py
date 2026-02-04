@@ -105,6 +105,7 @@ class Wine(Base, table=True):
     taste_profile: TasteProfile = Relationship(back_populates="wines")
     vivino_wine: Optional[VivinoWine] = Relationship(back_populates="wines")
 
+    followers: List["WineFollow"] = Relationship(back_populates="wine")
     grapes_link: List[WineGrapeLink] = Relationship(back_populates="wine")
     retailer_offers: List[RetailerWine] = Relationship(
         back_populates="wine"

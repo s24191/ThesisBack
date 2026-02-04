@@ -8,9 +8,10 @@ from shared.auth.user_binding import fastapi_users, auth_backend
 from shared.database import init_db, seed_db_from_csv
 from shared.schemas.user import UserRead, UserCreate, UserUpdate
 from fastapi.middleware.cors import CORSMiddleware
-from features.wines.endpoints import router as wines_router
+from features.wines.wine_endpoints import router as wines_router
 from features.wines.list_dbo import router as wines_list_router
 from features.wines.comments_endpoints import router as wine_comments_router
+from features.wines.wine_follows_endpoints import router as wine_follows_router
 
 import os
 
@@ -56,7 +57,7 @@ app.include_router(wines_list_router)
 
 app.include_router(wines_router)
 app.include_router(wine_comments_router)
-
+app.include_router(wine_follows_router)
 @app.get("/")
 async def root():
     return {"message": "Hello World"}

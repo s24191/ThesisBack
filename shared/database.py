@@ -28,7 +28,8 @@ async def get_session() -> AsyncSession:
 async def init_db() -> None:
     from shared.models import user # noqa: F401
     from shared.models import wine as models_wine  # noqa: F401
-
+    from shared.models import comment  # noqa: F401
+    from shared.models import wine_follow# noqa: F401
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
 
