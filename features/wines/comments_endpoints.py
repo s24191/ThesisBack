@@ -6,12 +6,40 @@ from shared.database import get_session
 from shared.models.wine import Wine
 from shared.models.comment import WineComment
 from shared.models.user import User
-from shared.schemas.comment import WineCommentRead, WineCommentCreate
+from shared.schemas.comment import WineCommentRead, WineCommentCreate, MyCommentItem
 from shared.auth.user_binding import current_active_user
 
 router = APIRouter(prefix="/wines", tags=["wines:comments"])
 
 
+
+@router.get("/me/comments", response_model=list[MyCommentItem])
+async def list_my_comments(
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(current_active_user),
+):
+    stmt = (
+        select(WineComment, Wine)
+        .join(Wine, Wine.id == WineComment.wine_id)
+        .where(WineComment.user_id == str(user.id))
+        .order_by(WineComment.created_at.desc())
+    )
+    res = await session.execute(stmt)
+    rows = res.all()
+
+    items: list[MyCommentItem] = []
+    for comment, wine in rows:
+        items.append(
+            MyCommentItem(
+                id=comment.id,
+                wine_id=wine.id,
+                wine_name=wine.name,
+                rating=comment.rating,
+                text=comment.text,
+                created_at=comment.created_at,
+            )
+        )
+    return items
 @router.get("/{wine_id}/comments", response_model=list[WineCommentRead])
 async def list_wine_comments(
     wine_id: int,

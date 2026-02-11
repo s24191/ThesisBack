@@ -14,3 +14,11 @@ class WineCommentRead(SQLModel):
 class WineCommentCreate(SQLModel):
     rating: int
     text: str
+
+class MyCommentItem(SQLModel):
+    id: int
+    wine_id: int
+    wine_name: str
+    rating: int
+    text: str
+    created_at: datetime
