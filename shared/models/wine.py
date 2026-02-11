@@ -82,34 +82,37 @@ class RetailerWine(Base, table=True):
 # ---------- Core wine entity ----------
 
 class Wine(Base, table=True):
+    __tablename__ = "wine"
+
     name: str = Field(index=True)
-    year: Optional[int] = Field(default=None, index=True)
-    alc_perc: Optional[float] = Field(default=None)
-    capacity_ml: Optional[int] = Field(default=None)
+    year: int | None = Field(default=None, index=True)
+    alc_perc: float | None = Field(default=None)
+    capacity_ml: int | None = Field(default=None)
 
     country_id: int = Field(foreign_key="country.id", index=True)
-    region_id: Optional[int] = Field(default=None, foreign_key="region.id")
+    region_id: int | None = Field(default=None, foreign_key="region.id")
 
     wine_type_id: int = Field(foreign_key="winetype.id", index=True)
     taste_profile_id: int = Field(
         foreign_key="tasteprofile.id", index=True
     )
 
-    vivino_wine_id: Optional[int] = Field(
+    vivino_wine_id: int | None = Field(
         default=None, foreign_key="vivinowine.id"
     )
-
     country: Country = Relationship(back_populates="wines")
-    region: Optional[Region] = Relationship(back_populates="wines")
+    region: Region | None  = Relationship(back_populates="wines")
     wine_type: WineType = Relationship(back_populates="wines")
     taste_profile: TasteProfile = Relationship(back_populates="wines")
-    vivino_wine: Optional[VivinoWine] = Relationship(back_populates="wines")
+    vivino_wine: VivinoWine | None  = Relationship(back_populates="wines")
 
-    followers: List["WineFollow"] = Relationship(back_populates="wine")
-    grapes_link: List[WineGrapeLink] = Relationship(back_populates="wine")
-    retailer_offers: List[RetailerWine] = Relationship(
+    notes: list["WineNote"] = Relationship(back_populates="wine")
+    taste_votes: list["WineTasteVote"] = Relationship(back_populates="wine")
+    followers: list["WineFollow"] = Relationship(back_populates="wine")
+    grapes_link: list[WineGrapeLink] = Relationship(back_populates="wine")
+    retailer_offers: list[RetailerWine] = Relationship(
         back_populates="wine"
     )
-    comments: List[WineComment] = Relationship(  # NEW
+    comments: list[WineComment] = Relationship(  # NEW
         back_populates="wine"
     )

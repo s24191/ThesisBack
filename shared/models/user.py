@@ -1,31 +1,28 @@
 from datetime import datetime, timezone
-from fastapi_users_db_sqlalchemy import SQLAlchemyBaseUserTableUUID
-from sqlalchemy import String, Boolean, DateTime
-from sqlalchemy.orm import Mapped, mapped_column, DeclarativeBase
+from uuid import UUID, uuid4
+from sqlmodel import SQLModel, Field
+from fastapi_users_db_sqlmodel import SQLModelBaseUserDB
 
 
-class Base(DeclarativeBase):
-    pass
-
-class User(SQLAlchemyBaseUserTableUUID, Base):
+class User(SQLModelBaseUserDB, SQLModel, table=True):
     __tablename__ = "users"
 
-    username: Mapped[str] = mapped_column(String(50), unique=True, index=True)
-    first_name: Mapped[str] = mapped_column(String(50), nullable=True)
-    last_name: Mapped[str] = mapped_column(String(50), nullable=True)
+    id: UUID = Field(default_factory=uuid4, primary_key=True, index=True)
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+    username: str = Field(max_length=50, unique=True, index=True)
+    first_name: str | None = Field(default=None, max_length=50)
+    last_name: str | None = Field(default=None, max_length=50)
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
     )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
     )
-    filter_setting: Mapped[str | None] = mapped_column(String, nullable=True)
-    filter_active: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    filter_setting: str | None = Field(default=None)
+    filter_active: bool = Field(default=False)
 
     model_config = {
-        "arbitrary_types_allowed": True
+        "arbitrary_types_allowed": True,
     }

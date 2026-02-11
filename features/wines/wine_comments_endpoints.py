@@ -6,7 +6,7 @@ from shared.database import get_session
 from shared.models.wine import Wine
 from shared.models.comment import WineComment
 from shared.models.user import User
-from shared.schemas.comment import WineCommentRead, WineCommentCreate, MyCommentItem
+from shared.schemas.wine_comment import WineCommentRead, WineCommentCreate, MyCommentItem
 from shared.auth.user_binding import current_active_user
 
 router = APIRouter(prefix="/wines", tags=["wines:comments"])

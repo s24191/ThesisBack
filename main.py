@@ -10,8 +10,10 @@ from shared.schemas.user import UserRead, UserCreate, UserUpdate
 from fastapi.middleware.cors import CORSMiddleware
 from features.wines.wine_endpoints import router as wines_router
 from features.wines.list_dbo import router as wines_list_router
-from features.wines.comments_endpoints import router as wine_comments_router
+from features.wines.wine_comments_endpoints import router as wine_comments_router
 from features.wines.wine_follows_endpoints import router as wine_follows_router
+from features.wines.wine_taste_endpoints import router as wine_taste_router
+from features.wines.wine_notes_endpoints import router as wine_notes_router
 
 import os
 
@@ -58,6 +60,9 @@ app.include_router(wines_list_router)
 app.include_router(wines_router)
 app.include_router(wine_comments_router)
 app.include_router(wine_follows_router)
+app.include_router(wine_taste_router)
+app.include_router(wine_notes_router)
+
 @app.get("/")
 async def root():
     return {"message": "Hello World"}
