@@ -1,0 +1,62 @@
+# Docker
+# Build and push an image to Azure Container Registry
+# https://docs.microsoft.com/azure/devops/pipelines/languages/docker
+
+trigger:
+- main
+
+resources:
+- repo: self
+
+variables:
+  # Container registry service connection established during pipeline creation
+  dockerRegistryServiceConnection: 'thesisregistry-sc'
+  azureSubscription: 'thesis-azure-sc'
+  imageRepository: 'thesisback'
+  containerRegistry: 'thesisregistry-a2anexeebgawbdha.azurecr.io'
+  dockerfilePath: '$(Build.SourcesDirectory)/Dockerfile'
+  tag: '$(Build.BuildId)'
+  webAppName: 'thesis-backend-dev'
+
+  # Agent VM image name
+  vmImageName: 'ubuntu-latest'
+
+stages:
+- stage: Build
+  displayName: Build and push stage
+  jobs:
+  - job: Build
+    displayName: Build
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: Docker@2
+      displayName: Build and push an image to container registry
+      inputs:
+        command: buildAndPush
+        repository: $(imageRepository)
+        dockerfile: $(dockerfilePath)
+        containerRegistry: $(dockerRegistryServiceConnection)
+        tags: |
+          $(tag)
+          latest
+
+- stage: Deploy
+  displayName: Deploy backend
+  dependsOn: Build
+  jobs:
+  - deployment: DeployBackend
+    displayName: Deploy to App Service
+    environment: thesis-backend-dev
+    pool:
+      vmImage: $(vmImageName)
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureWebAppContainer@1
+            displayName: Deploy container to Azure Web App
+            inputs:
+              azureSubscription: $(azureSubscription)
+              appName: $(webAppName)
+              containers: '$(containerRegistry)/$(imageRepository):$(tag)'
