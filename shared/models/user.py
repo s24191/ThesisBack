@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from sqlalchemy import Column, DateTime
 from uuid import UUID, uuid4
 from sqlmodel import SQLModel, Field
 from fastapi_users_db_sqlmodel import SQLModelBaseUserDB
@@ -14,10 +15,12 @@ class User(SQLModelBaseUserDB, SQLModel, table=True):
     last_name: str | None = Field(default=None, max_length=50)
 
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), nullable=False),
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), nullable=False),
     )
 
     filter_setting: str | None = Field(default=None)
