@@ -2,7 +2,7 @@ import csv
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Iterable
 
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -25,27 +25,28 @@ class RetailerCSV:
     retailer_base_url: str
 
 
-BASE_CSV_DIR = Path(
-    os.getenv("SEED_CSV_DIR", Path(__file__).resolve().parent / "csv_files")
-)
+def get_default_csv_files(base_csv_dir: Path | None = None) -> list[RetailerCSV]:
+    base_dir = base_csv_dir or Path(
+        os.getenv("SEED_CSV_DIR", Path(__file__).resolve().parent / "csv_files")
+    )
 
-CSV_FILES: list[RetailerCSV] = [
-    RetailerCSV(
-        path=BASE_CSV_DIR / "sklep-wina" / "cleaned_wine_data.csv",
-        retailer_name="Sklep Wina",
-        retailer_base_url="https://sklep-wina.pl",
-    ),
-    RetailerCSV(
-        path=BASE_CSV_DIR / "winapl" / "cleaned_wine_data.csv",
-        retailer_name="Wina.pl",
-        retailer_base_url="https://wina.pl",
-    ),
-    RetailerCSV(
-        path=BASE_CSV_DIR / "malawinnica" / "cleaned_winedata_malawinnica.csv",
-        retailer_name="Mala Winnica",
-        retailer_base_url="https://malawinnica.pl",
-    ),
-]
+    return [
+        RetailerCSV(
+            path=base_dir / "sklep-wina" / "cleaned_wine_data.csv",
+            retailer_name="Sklep Wina",
+            retailer_base_url="https://sklep-wina.pl",
+        ),
+        RetailerCSV(
+            path=base_dir / "winapl" / "cleaned_wine_data.csv",
+            retailer_name="Wina.pl",
+            retailer_base_url="https://wina.pl",
+        ),
+        RetailerCSV(
+            path=base_dir / "malawinnica" / "cleaned_wine_data.csv",
+            retailer_name="Mala Winnica",
+            retailer_base_url="https://malawinnica.pl",
+        ),
+    ]
 
 def _parse_grapes(raw: str) -> list[str]:
     if not raw:
@@ -176,8 +177,13 @@ async def _upsert_offer_from_row(session, csv_info, row):
     )
     session.add(offer)
 
-async def seed_wines_from_csvs(session: AsyncSession) -> None:
-    for csv_info in CSV_FILES:
+async def seed_wines_from_csvs(
+    session: AsyncSession,
+    csv_files: Iterable[RetailerCSV] | None = None,
+) -> None:
+    files_to_seed = list(csv_files) if csv_files is not None else get_default_csv_files()
+
+    for csv_info in files_to_seed:
         if not csv_info.path.exists():
             continue
 
