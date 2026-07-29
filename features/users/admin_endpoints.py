@@ -10,7 +10,6 @@ from shared.models.wine import Country, Region, WineType, Wine, TasteProfile, Wi
     RetailerWine, VivinoWine
 from shared.schemas.wine import WineRead, WineCreate
 
-# Regions  Wine types Countries
 router = APIRouter(
     prefix="/admin",
     tags=["admin"],
@@ -732,7 +731,7 @@ async def admin_create_wine(
     payload: WineCreate,
     session: AsyncSession = Depends(get_session),
 ):
-    # validate foreign keys exist
+
     country = await session.get(Country, payload.country_id)
     if not country:
         raise HTTPException(status_code=404, detail="Country not found")
@@ -771,7 +770,7 @@ async def admin_update_wine(
     if not wine:
         raise HTTPException(status_code=404, detail="Wine not found")
 
-    # simple field updates
+
     if payload.name is not None:
         wine.name = payload.name.strip()
 
@@ -784,7 +783,7 @@ async def admin_update_wine(
     if payload.capacity_ml is not None:
         wine.capacity_ml = payload.capacity_ml
 
-    # foreign key updates with existence checks
+
     if payload.country_id is not None:
         country = await session.get(Country, payload.country_id)
         if not country:
