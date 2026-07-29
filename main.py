@@ -14,7 +14,7 @@ from features.wines.wine_comments_endpoints import router as wine_comments_route
 from features.wines.wine_follows_endpoints import router as wine_follows_router
 from features.wines.wine_taste_endpoints import router as wine_taste_router
 from features.wines.wine_notes_endpoints import router as wine_notes_router
-
+from features.users.admin_endpoints import router as admin_router
 import os
 
 @asynccontextmanager
@@ -58,7 +58,7 @@ app.include_router(wine_comments_router)
 app.include_router(wine_follows_router)
 app.include_router(wine_taste_router)
 app.include_router(wine_notes_router)
-
+app.include_router(admin_router)
 @app.get("/")
 async def root():
     return {"message": "Hello World"}

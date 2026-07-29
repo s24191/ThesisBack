@@ -11,7 +11,8 @@ class UserRead(schemas.BaseUser[UUID]):
     last_name: Optional[str] = None
     filter_setting: Optional[str] = None
     filter_active: bool
-
+    is_superuser: bool
+    
     model_config = ConfigDict(from_attributes=True)
 
 
