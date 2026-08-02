@@ -1,13 +1,13 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlmodel import SQLModel, select
+from sqlmodel import SQLModel, select, func
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from shared.auth.admin import current_admin
 from shared.database import get_session
 from shared.models.wine import Country, Region, WineType, Wine, TasteProfile, WineGrapeLink, Grape, Retailer, \
-    RetailerWine, VivinoWine
+    RetailerWine
 from shared.schemas.wine import WineRead, WineCreate
 
 router = APIRouter(
@@ -100,6 +100,17 @@ class RetailerUpdate(SQLModel):
     name: Optional[str] = None
     url: Optional[str] = None
 
+class AdminWineRow(WineRead):
+    country: str | None = None
+    region: str | None = None
+    wine_type: str | None = None
+    taste_profile: str | None = None
+
+    taste_votes_count: int | None = None
+    taste_average: float | None = None
+    comments_count: int | None = None
+    rating_average: float | None = None
+
 class WineUpdate(SQLModel):
     name: Optional[str] = None
     year: Optional[int] = None
@@ -109,7 +120,10 @@ class WineUpdate(SQLModel):
     region_id: Optional[int] = None
     wine_type_id: Optional[int] = None
     taste_profile_id: Optional[int] = None
-    vivino_wine_id: Optional[int] = None
+
+class PaginatedWineRows(SQLModel):
+    items: list[AdminWineRow]
+    total: int
 
 @router.get("/countries", response_model=list[CountryRead])
 async def list_countries(
@@ -687,7 +701,7 @@ async def delete_retailer(
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-@router.get("/wines", response_model=list[WineRead])
+@router.get("/wines", response_model=PaginatedWineRows)
 async def admin_list_wines(
     limit: int = 100,
     offset: int = 0,
@@ -696,7 +710,24 @@ async def admin_list_wines(
     wine_type_id: int | None = None,
     session: AsyncSession = Depends(get_session),
 ):
-    stmt = select(Wine)
+    base_stmt = select(Wine)
+    if country_id is not None:
+        base_stmt = base_stmt.where(Wine.country_id == country_id)
+    if region_id is not None:
+        base_stmt = base_stmt.where(Wine.region_id == region_id)
+    if wine_type_id is not None:
+        base_stmt = base_stmt.where(Wine.wine_type_id == wine_type_id)
+
+    total_result = await session.execute(select(func.count()).select_from(base_stmt.subquery()))
+    total = total_result.scalar_one() or 0
+
+    stmt = (
+        select(Wine, Country, Region, WineType, TasteProfile)
+        .join(Country, Country.id == Wine.country_id, isouter=True)
+        .join(Region, Region.id == Wine.region_id, isouter=True)
+        .join(WineType, WineType.id == Wine.wine_type_id, isouter=True)
+        .join(TasteProfile, TasteProfile.id == Wine.taste_profile_id, isouter=True)
+    )
 
     if country_id is not None:
         stmt = stmt.where(Wine.country_id == country_id)
@@ -708,9 +739,32 @@ async def admin_list_wines(
     stmt = stmt.order_by(Wine.id).offset(offset).limit(limit)
 
     result = await session.execute(stmt)
-    wines = result.scalars().all()
-    return wines
+    rows = result.all()
 
+    items = [
+        AdminWineRow(
+            id=wine.id,
+            name=wine.name,
+            year=wine.year,
+            alc_perc=wine.alc_perc,
+            capacity_ml=wine.capacity_ml,
+            country_id=wine.country_id,
+            region_id=wine.region_id,
+            wine_type_id=wine.wine_type_id,
+            taste_profile_id=wine.taste_profile_id,
+            country=country.name if country else None,
+            region=region.name if region else None,
+            wine_type=wine_type.name if wine_type else None,
+            taste_profile=taste_profile.name if taste_profile else None,
+            taste_votes_count=None,
+            taste_average=None,
+            comments_count=None,
+            rating_average=None,
+        )
+        for wine, country, region, wine_type, taste_profile in rows
+    ]
+
+    return PaginatedWineRows(items=items, total=total)
 
 @router.get("/wines/{wine_id}", response_model=WineRead)
 async def admin_get_wine(
@@ -748,11 +802,6 @@ async def admin_create_wine(
     taste_profile = await session.get(TasteProfile, payload.taste_profile_id)
     if not taste_profile:
         raise HTTPException(status_code=404, detail="Taste profile not found")
-
-    if payload.vivino_wine_id is not None:
-        vivino = await session.get(VivinoWine, payload.vivino_wine_id)
-        if not vivino:
-            raise HTTPException(status_code=404, detail="Vivino wine not found")
 
     wine = Wine(**payload.dict())
     session.add(wine)
@@ -810,15 +859,6 @@ async def admin_update_wine(
         if not taste_profile:
             raise HTTPException(status_code=404, detail="Taste profile not found")
         wine.taste_profile_id = payload.taste_profile_id
-
-    if payload.vivino_wine_id is not None:
-        if payload.vivino_wine_id == 0:
-            wine.vivino_wine_id = None
-        else:
-            vivino = await session.get(VivinoWine, payload.vivino_wine_id)
-            if not vivino:
-                raise HTTPException(status_code=404, detail="Vivino wine not found")
-            wine.vivino_wine_id = payload.vivino_wine_id
 
     await session.commit()
     await session.refresh(wine)
