@@ -14,4 +14,11 @@ from .wine import (
 from .comment import WineComment
 from .wine_follow import WineFollow
 from .wine_taste_vote import WineTasteVote
-from .wine_note import WineNote, WineNoteVote 
+from .wine_note import WineNote, WineNoteVote
+
+from .scraping import (
+    ScrapeSite,
+    ScrapeRun,
+    ScrapeStepRun,
+    ScrapeLog,
+)

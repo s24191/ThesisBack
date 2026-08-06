@@ -15,6 +15,8 @@ from features.wines.wine_follows_endpoints import router as wine_follows_router
 from features.wines.wine_taste_endpoints import router as wine_taste_router
 from features.wines.wine_notes_endpoints import router as wine_notes_router
 from features.users.admin_endpoints import router as admin_router
+from features.users.admin_scraping_endpoints import router as scraping_router
+
 import os
 
 @asynccontextmanager
