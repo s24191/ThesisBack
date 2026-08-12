@@ -5,7 +5,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from shared.database import get_session
-from shared.models.wine import Wine, Grape, WineGrapeLink, Country, Region, WineType, TasteProfile, VivinoWine, \
+from shared.models.wine import Wine, Grape, WineGrapeLink, Country, Region, WineType, TasteProfile,  \
     RetailerWine, Retailer
 from shared.schemas.wine import WineRead, WineCreate
 from shared.schemas.wine_detail import WineDetail, WineOffer
@@ -147,12 +147,11 @@ async def get_wine_detail(
 ):
     # 1) load wine + lookup tables
     stmt = (
-        select(Wine, Country, Region, WineType, TasteProfile, VivinoWine)
+        select(Wine, Country, Region, WineType, TasteProfile)
         .join(Country, Country.id == Wine.country_id)
         .join(Region, Region.id == Wine.region_id, isouter=True)
         .join(WineType, WineType.id == Wine.wine_type_id)
         .join(TasteProfile, TasteProfile.id == Wine.taste_profile_id, isouter=True)
-        .join(VivinoWine, VivinoWine.id == Wine.vivino_wine_id, isouter=True)
         .where(Wine.id == wine_id)
     )
     res = await session.execute(stmt)
@@ -160,7 +159,7 @@ async def get_wine_detail(
     if not row:
         raise HTTPException(status_code=404, detail="Wine not found")
 
-    wine, country, region, wine_type, taste_profile, vivino = row
+    wine, country, region, wine_type, taste_profile = row
 
     # 2) offers for this wine
     stmt_offers = (
@@ -192,12 +191,8 @@ async def get_wine_detail(
     grape_names = [name for (name,) in res_grapes.all()]
     grapes_str: Optional[str] = ", ".join(grape_names) if grape_names else None
 
-    # 4) Vivino rating (if present)
     rating: Optional[float] = None
     ratings_count: Optional[int] = None
-    if vivino:
-        rating = vivino.average_rating
-        ratings_count = vivino.ratings_count
 
     # 5) build DTO
     return WineDetail(

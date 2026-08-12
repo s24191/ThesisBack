@@ -15,7 +15,8 @@ from features.wines.wine_follows_endpoints import router as wine_follows_router
 from features.wines.wine_taste_endpoints import router as wine_taste_router
 from features.wines.wine_notes_endpoints import router as wine_notes_router
 from features.users.admin_endpoints import router as admin_router
-from features.users.admin_scraping_endpoints import router as scraping_router
+from features.users.scraping_endpoints import router as scraping_router
+from features.users.translation_reviews import router as translation_router
 
 import os
 
@@ -61,6 +62,8 @@ app.include_router(wine_follows_router)
 app.include_router(wine_taste_router)
 app.include_router(wine_notes_router)
 app.include_router(admin_router)
+app.include_router(scraping_router)
+app.include_router(translation_router)
 @app.get("/")
 async def root():
     return {"message": "Hello World"}

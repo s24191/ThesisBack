@@ -42,18 +42,6 @@ class WineGrapeLink(SQLModel, table=True):
     grape: Grape = Relationship(back_populates="wines_link")
 
 
-# Vivino
-
-class VivinoWine(Base, table=True):
-    average_rating: Optional[float] = Field(default=None)
-    ratings_count: Optional[int] = Field(default=None)
-    tasting_notes: Optional[str] = None
-    food_pairings: Optional[str] = None
-    link: Optional[str] = None
-
-    wines: List["Wine"] = Relationship(back_populates="vivino_wine")
-
-
 # Retailers & offers
 
 class Retailer(Base, table=True):
@@ -71,7 +59,6 @@ class RetailerWine(Base, table=True):
     last_update: Optional[str] = None  # later: datetime
     available: bool = Field(default=True)
     url: str
-    external_sku: Optional[str] = None
 
     image_url: Optional[str] = None
 
@@ -97,14 +84,10 @@ class Wine(Base, table=True):
         foreign_key="tasteprofile.id", index=True
     )
 
-    vivino_wine_id: int | None = Field(
-        default=None, foreign_key="vivinowine.id"
-    )
     country: Country = Relationship(back_populates="wines")
     region: Region | None  = Relationship(back_populates="wines")
     wine_type: WineType = Relationship(back_populates="wines")
     taste_profile: TasteProfile = Relationship(back_populates="wines")
-    vivino_wine: VivinoWine | None  = Relationship(back_populates="wines")
 
     notes: list["WineNote"] = Relationship(back_populates="wine")
     taste_votes: list["WineTasteVote"] = Relationship(back_populates="wine")

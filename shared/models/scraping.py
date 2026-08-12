@@ -37,16 +37,6 @@ class ScrapeRun(SQLModel, table=True):
 
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
-    last_heartbeat_at: Optional[datetime] = None
-
-    duration_seconds: Optional[float] = None
-
-    total_wines_fetched: int = Field(default=0)
-    changed_records: int = Field(default=0)
-    retries: int = Field(default=0)
-
-    error_message: Optional[str] = None
-
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -70,8 +60,11 @@ class ScrapeStepRun(SQLModel, table=True):
     fetched_count: int = Field(default=0)
     changed_count: int = Field(default=0)
     retries: int = Field(default=0)
-    links_blob_path: Optional[str] = Field(default=None)
-    error_message: Optional[str] = None
+
+    input_blob_path: Optional[str] = Field(default=None)
+    output_blob_path: Optional[str] = Field(default=None)
+
+    error_message: Optional[str] = Field(default=None)
 
     created_at: datetime = Field(default_factory=datetime.utcnow)
 

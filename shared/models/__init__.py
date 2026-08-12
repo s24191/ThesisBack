@@ -7,7 +7,6 @@ from .wine import (
     TasteProfile,
     Grape,
     WineGrapeLink,
-    VivinoWine,
     Retailer,
     RetailerWine,
 )
@@ -21,4 +20,9 @@ from .scraping import (
     ScrapeRun,
     ScrapeStepRun,
     ScrapeLog,
+)
+from .translations import (
+    TranslationMapping,
+    TranslationReviewItem,
+    TranslationReviewOccurrence,
 )

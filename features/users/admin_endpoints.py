@@ -1,20 +1,13 @@
-from pydantic import BaseModel
 from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException, Response, status, BackgroundTasks
 from sqlmodel import SQLModel, select, func
 from sqlmodel.ext.asyncio.session import AsyncSession
-
-from scripts.background_list import run_list_background
-from scripts.sites import SITE_CONFIG
 from shared.auth.admin import current_admin
 from shared.database import get_session
-from shared.models import ScrapeSite, ScrapeRun
 from shared.models.wine import Country, Region, WineType, Wine, TasteProfile, WineGrapeLink, Grape, Retailer, \
     RetailerWine
 from shared.schemas.wine import WineRead, WineCreate
 
-from datetime import datetime
 
 router = APIRouter(
     prefix="/admin",
@@ -22,69 +15,6 @@ router = APIRouter(
     dependencies=[Depends(current_admin)],
 )
 
-def generate_run_key(site_key: str) -> str:
-    now = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
-    return f"{site_key}-{now}"
-
-class StartListRequest(BaseModel):
-    site: str
-
-@router.post("/scraping/start-list", response_model=dict)
-async def start_list_scraping(
-    payload: StartListRequest,
-    background_tasks: BackgroundTasks,
-    session: AsyncSession = Depends(get_session),
-):
-    site_key = payload.site
-
-    if site_key not in SITE_CONFIG:
-        raise HTTPException(status_code=400, detail=f"Unknown site '{site_key}'")
-
-    site_meta = SITE_CONFIG[site_key]
-    site_name = site_meta["name"]
-    site_base_url = site_meta["base_url"]
-    fetch_fn = site_meta["fetch_fn"]
-
-    result = await session.execute(
-        select(ScrapeSite).where(ScrapeSite.key == site_key)
-    )
-    site = result.scalar_one_or_none()
-    if not site:
-        site = ScrapeSite(
-            key=site_key,
-            name=site_name,
-            base_url=site_base_url,
-        )
-        session.add(site)
-        await session.flush()
-
-    run_key = generate_run_key(site_key)
-    run = ScrapeRun(
-        site_id=site.id,
-        run_key=run_key,
-        triggered_by="manual:admin",
-        status="queued",
-        started_at=None,
-    )
-    session.add(run)
-    await session.flush()
-    await session.commit()
-
-    background_tasks.add_task(
-        run_list_background,
-        run.id,
-        site_key,
-        site_name,
-        site_base_url,
-        fetch_fn,
-    )
-
-    return {
-        "run_id": run.id,
-        "run_key": run.run_key,
-        "site": site.key,
-        "status": run.status,
-    }
 @router.get("")
 async def admin_home():
     return {

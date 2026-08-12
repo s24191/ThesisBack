@@ -9,7 +9,6 @@ from shared.models.wine import (
     Wine,
     Country,
     Region,
-    VivinoWine,
     Retailer,
     RetailerWine,
 )
@@ -53,13 +52,11 @@ async def list_wines_dbo(
             Wine,
             Country,
             Region,
-            VivinoWine,
             Retailer,
             RetailerWine,
         )
         .join(Country, Country.id == Wine.country_id)
         .join(Region, Region.id == Wine.region_id, isouter=True)
-        .join(VivinoWine, VivinoWine.id == Wine.vivino_wine_id, isouter=True)
         .join(RetailerWine, RetailerWine.wine_id == Wine.id)
         .join(Retailer, Retailer.id == RetailerWine.retailer_id)
     )
@@ -77,8 +74,7 @@ async def list_wines_dbo(
         stmt = stmt.order_by(RetailerWine.price.asc())
     elif sort == "price-desc":
         stmt = stmt.order_by(RetailerWine.price.desc())
-    elif sort == "rating-desc":
-        stmt = stmt.order_by(VivinoWine.average_rating.desc().nullslast())
+
 
     stmt = stmt.offset(offset).limit(limit)
 
@@ -87,15 +83,13 @@ async def list_wines_dbo(
 
     wines_map: Dict[int, WineListItem] = {}
 
-    for wine, country_obj, region_obj, vivino, retailer, offer in rows:
+    for wine, country_obj, region_obj, retailer, offer in rows:
         if wine.id not in wines_map:
             wines_map[wine.id] = WineListItem(
                 id=wine.id,
                 name=wine.name,
                 country=country_obj.name,
                 region=region_obj.name if region_obj else None,
-                rating=vivino.average_rating if vivino else None,
-                ratings_count=vivino.ratings_count if vivino else None,
                 best_price=None,
                 offers=[],
             )
