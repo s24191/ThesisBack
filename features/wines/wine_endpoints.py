@@ -1,28 +1,266 @@
+from sqlalchemy import cast, func, Float
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from shared.database import get_session
+from shared.models import WineComment
 from shared.models.wine import Wine, Grape, WineGrapeLink, Country, Region, WineType, TasteProfile,  \
     RetailerWine, Retailer
-from shared.schemas.wine import WineRead, WineCreate
+from shared.schemas.wine import WineRead, WineCreate, WineCardRead, WineCardOffer
 from shared.schemas.wine_detail import WineDetail, WineOffer
 from shared.schemas.wine_list import WineListItem
 from thefuzz import fuzz
 
 router = APIRouter(prefix="/wines", tags=["wines"])
 
+rating_stats = (
+    select(
+        WineComment.wine_id.label("wine_id"),
+        cast(
+            func.avg(WineComment.rating),
+            Float,
+        ).label("rating"),
+        func.count(WineComment.id).label(
+            "ratings_count",
+        ),
+    )
+    .group_by(WineComment.wine_id)
+    .subquery()
+)
 
-@router.get("/", response_model=List[WineRead])
-async def list_wines(
-    limit: int = 50,
+offer_stats = (
+    select(
+        RetailerWine.wine_id.label("wine_id"),
+        func.min(RetailerWine.price).label(
+            "best_price",
+        ),
+    )
+    .group_by(RetailerWine.wine_id)
+    .subquery()
+)
+
+@router.get("/countries", response_model=List[str])
+async def list_countries(session: AsyncSession = Depends(get_session)):
+    result = await session.execute(select(Country.name).order_by(Country.name))
+    return [row[0] for row in result.all()]
+
+
+@router.get("/regions", response_model=List[str])
+async def list_regions(
+    country: Optional[str] = Query(None),
     session: AsyncSession = Depends(get_session),
 ):
-    result = await session.execute(select(Wine).limit(limit))
-    wines = result.scalars().all()
-    return wines
+    stmt = select(Region.name).order_by(Region.name)
+    if country:
+        stmt = (
+            stmt.join(Country, Country.id == Region.country_id)
+            .where(Country.name == country)
+        )
+    result = await session.execute(stmt)
+    return [row[0] for row in result.all()]
+
+
+@router.get(
+    "/",
+    response_model=List[WineCardRead],
+)
+async def list_wines(
+    search: Optional[str] = None,
+    country: Optional[str] = None,
+    region: Optional[str] = None,
+    sort: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    session: AsyncSession = Depends(get_session),
+):
+    stmt = (
+        select(
+            Wine,
+            Country,
+            Region,
+            WineType,
+            TasteProfile,
+            rating_stats.c.rating,
+            func.coalesce(
+                rating_stats.c.ratings_count,
+                0,
+            ).label("ratings_count"),
+            offer_stats.c.best_price,
+        )
+        .join(Country, Country.id == Wine.country_id)
+        .outerjoin(
+            Region,
+            Region.id == Wine.region_id,
+        )
+        .join(
+            WineType,
+            WineType.id == Wine.wine_type_id,
+        )
+        .outerjoin(
+            TasteProfile,
+            TasteProfile.id == Wine.taste_profile_id,
+        )
+        .outerjoin(
+            rating_stats,
+            rating_stats.c.wine_id == Wine.id,
+        )
+        .outerjoin(
+            offer_stats,
+            offer_stats.c.wine_id == Wine.id,
+        )
+    )
+
+    if search:
+        stmt = stmt.where(
+            Wine.name.ilike(f"%{search.strip()}%"),
+        )
+
+    if country:
+        stmt = stmt.where(
+            Country.name == country,
+        )
+
+    if region:
+        stmt = stmt.where(
+            Region.name == region,
+        )
+
+    if sort == "rating-desc":
+        stmt = stmt.order_by(
+            rating_stats.c.rating.desc().nullslast(),
+            Wine.id.asc(),
+        )
+
+    elif sort == "price-asc":
+        stmt = stmt.order_by(
+            offer_stats.c.best_price.asc().nullslast(),
+            Wine.id.asc(),
+        )
+
+    elif sort == "price-desc":
+        stmt = stmt.order_by(
+            offer_stats.c.best_price.desc().nullslast(),
+            Wine.id.asc(),
+        )
+
+    else:
+        stmt = stmt.order_by(Wine.id.desc())
+
+    stmt = stmt.offset(offset).limit(limit)
+
+    result = await session.execute(stmt)
+    wine_rows = result.all()
+
+    wine_ids = [
+        wine.id
+        for (
+            wine,
+            _country,
+            _region,
+            _wine_type,
+            _taste,
+            _rating,
+            _ratings_count,
+            _best_price,
+        ) in wine_rows
+    ]
+
+    offers_by_wine: dict[int, list[WineCardOffer]] = {
+        wine_id: []
+        for wine_id in wine_ids
+    }
+
+    if wine_ids:
+        offers_stmt = (
+            select(
+                RetailerWine.wine_id,
+                Retailer.name,
+                RetailerWine.url,
+                RetailerWine.price,
+                RetailerWine.image_url,
+            )
+            .join(
+                Retailer,
+                Retailer.id == RetailerWine.retailer_id,
+            )
+            .where(
+                RetailerWine.wine_id.in_(wine_ids),
+            )
+            .order_by(
+                RetailerWine.wine_id,
+                RetailerWine.price.asc(),
+            )
+        )
+
+        offers_result = await session.execute(
+            offers_stmt,
+        )
+
+        for (
+            wine_id,
+            retailer_name,
+            shop_url,
+            price,
+            image_url,
+        ) in offers_result.all():
+            offers_by_wine[wine_id].append(
+                WineCardOffer(
+                    shop_name=retailer_name,
+                    shop_url=shop_url,
+                    price=float(price),
+                    image_url=image_url,
+                )
+            )
+
+    return [
+        WineCardRead(
+            id=wine.id,
+            name=wine.name,
+            year=wine.year,
+            country=country_row.name,
+            region=(
+                region_row.name
+                if region_row is not None
+                else None
+            ),
+            wine_type=wine_type_row.name,
+            taste=(
+                taste_row.name
+                if taste_row is not None
+                else None
+            ),
+            rating=(
+                float(average_rating)
+                if average_rating is not None
+                else None
+            ),
+            ratings_count=int(ratings_count),
+            best_price=(
+                float(best_price)
+                if best_price is not None
+                else None
+            ),
+            offers=offers_by_wine[wine.id],
+            image_url=(
+                offers_by_wine[wine.id][0].image_url
+                if offers_by_wine[wine.id]
+                else None
+            ),
+        )
+        for (
+            wine,
+            country_row,
+            region_row,
+            wine_type_row,
+            taste_row,
+            average_rating,
+            ratings_count,
+            best_price,
+        ) in wine_rows
+    ]
 
 
 @router.post("/", response_model=WineRead, status_code=201)
@@ -70,7 +308,6 @@ async def get_similar_wines(
     res_g = await session.execute(stmt_grapes)
     base_grapes = {name for (name,) in res_g.all()}
 
-    # select candidate wines with same country + type
     stmt = (
         select(Wine, Country, Region, WineType, TasteProfile)
         .join(Country, Country.id == Wine.country_id)
@@ -85,7 +322,6 @@ async def get_similar_wines(
     res = await session.execute(stmt)
     rows = res.all()
 
-    # score candidates by: same taste, shared grapes, name similarity
 
 
     def norm_name(s: str) -> str:
@@ -95,7 +331,6 @@ async def get_similar_wines(
 
     scored = []
     for wine, country, region, wt, taste in rows:
-        # grapes for candidate
         stmt_cg = (
             select(Grape.name)
             .join(WineGrapeLink, WineGrapeLink.grape_id == Grape.id)
@@ -111,7 +346,6 @@ async def get_similar_wines(
 
         name_score = fuzz.partial_ratio(base_name, norm_name(wine.name))
 
-        # basic heuristic
         total_score = grape_score * 3 + taste_score * 2 + name_score / 20.0
 
         scored.append(
@@ -145,7 +379,6 @@ async def get_wine_detail(
     wine_id: int,
     session: AsyncSession = Depends(get_session),
 ):
-    # 1) load wine + lookup tables
     stmt = (
         select(Wine, Country, Region, WineType, TasteProfile)
         .join(Country, Country.id == Wine.country_id)
@@ -161,7 +394,6 @@ async def get_wine_detail(
 
     wine, country, region, wine_type, taste_profile = row
 
-    # 2) offers for this wine
     stmt_offers = (
         select(RetailerWine, Retailer)
         .join(Retailer, Retailer.id == RetailerWine.retailer_id)
@@ -181,7 +413,6 @@ async def get_wine_detail(
             )
         )
 
-    # 3) grapes list
     stmt_grapes = (
         select(Grape.name)
         .join(WineGrapeLink, WineGrapeLink.grape_id == Grape.id)
@@ -194,7 +425,6 @@ async def get_wine_detail(
     rating: Optional[float] = None
     ratings_count: Optional[int] = None
 
-    # 5) build DTO
     return WineDetail(
         id=wine.id,
         name=wine.name,
@@ -210,3 +440,4 @@ async def get_wine_detail(
         ratings_count=ratings_count,
         offers=offers,
     )
+

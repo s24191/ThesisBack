@@ -9,7 +9,6 @@ from shared.database import init_db
 from shared.schemas.user import UserRead, UserCreate, UserUpdate
 from fastapi.middleware.cors import CORSMiddleware
 from features.wines.wine_endpoints import router as wines_router
-from features.wines.list_dbo import router as wines_list_router
 from features.wines.wine_comments_endpoints import router as wine_comments_router
 from features.wines.wine_follows_endpoints import router as wine_follows_router
 from features.wines.wine_taste_endpoints import router as wine_taste_router
@@ -54,8 +53,6 @@ app.include_router(
     prefix="/auth/users",
     tags=["users"],
 )
-app.include_router(wines_list_router)
-
 app.include_router(wines_router)
 app.include_router(wine_comments_router)
 app.include_router(wine_follows_router)

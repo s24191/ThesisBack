@@ -1,9 +1,11 @@
+from sqlalchemy import Float, func, cast
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Response, status, BackgroundTasks
-from sqlmodel import SQLModel, select, func
+from sqlmodel import SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 from shared.auth.admin import current_admin
 from shared.database import get_session
+from shared.models import WineTasteVote, WineComment
 from shared.models.wine import Country, Region, WineType, Wine, TasteProfile, WineGrapeLink, Grape, Retailer, \
     RetailerWine
 from shared.schemas.wine import WineRead, WineCreate
@@ -701,42 +703,283 @@ async def delete_retailer(
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-@router.get("/wines", response_model=PaginatedWineRows)
+@router.get(
+    "/wines",
+    response_model=PaginatedWineRows,
+)
 async def admin_list_wines(
     limit: int = 100,
     offset: int = 0,
+
+    search: str | None = None,
+    country: str | None = None,
+    region: str | None = None,
+    sort: str | None = None,
+
     country_id: int | None = None,
     region_id: int | None = None,
     wine_type_id: int | None = None,
+
     session: AsyncSession = Depends(get_session),
 ):
-    base_stmt = select(Wine)
-    if country_id is not None:
-        base_stmt = base_stmt.where(Wine.country_id == country_id)
-    if region_id is not None:
-        base_stmt = base_stmt.where(Wine.region_id == region_id)
-    if wine_type_id is not None:
-        base_stmt = base_stmt.where(Wine.wine_type_id == wine_type_id)
+    comment_stats = (
+        select(
+            WineComment.wine_id.label("wine_id"),
+            func.count(WineComment.id).label(
+                "comments_count",
+            ),
+            cast(
+                func.avg(WineComment.rating),
+                Float,
+            ).label("rating_average"),
+        )
+        .group_by(WineComment.wine_id)
+        .subquery()
+    )
 
-    total_result = await session.execute(select(func.count()).select_from(base_stmt.subquery()))
+
+    taste_score_per_vote = cast(
+        (
+            WineTasteVote.body
+            + WineTasteVote.tannin
+            + WineTasteVote.sweetness
+            + WineTasteVote.acidity
+        ) / 4.0,
+        Float,
+    )
+
+    taste_stats = (
+        select(
+            WineTasteVote.wine_id.label("wine_id"),
+
+            func.count(WineTasteVote.id).label(
+                "taste_votes_count",
+            ),
+
+            cast(
+                func.avg(taste_score_per_vote),
+                Float,
+            ).label("taste_average"),
+
+            cast(
+                func.avg(WineTasteVote.body),
+                Float,
+            ).label("body_average"),
+
+            cast(
+                func.avg(WineTasteVote.tannin),
+                Float,
+            ).label("tannin_average"),
+
+            cast(
+                func.avg(WineTasteVote.sweetness),
+                Float,
+            ).label("sweetness_average"),
+
+            cast(
+                func.avg(WineTasteVote.acidity),
+                Float,
+            ).label("acidity_average"),
+        )
+        .group_by(WineTasteVote.wine_id)
+        .subquery()
+    )
+
+    offer_stats = (
+        select(
+            RetailerWine.wine_id.label("wine_id"),
+            func.min(RetailerWine.price).label(
+                "best_price",
+            ),
+        )
+        .group_by(RetailerWine.wine_id)
+        .subquery()
+    )
+
+
+    base_stmt = (
+        select(Wine)
+        .join(
+            Country,
+            Country.id == Wine.country_id,
+            isouter=True,
+        )
+        .join(
+            Region,
+            Region.id == Wine.region_id,
+            isouter=True,
+        )
+    )
+
+    if search and search.strip():
+        base_stmt = base_stmt.where(
+            Wine.name.ilike(
+                f"%{search.strip()}%",
+            )
+        )
+
+    if country:
+        base_stmt = base_stmt.where(
+            Country.name == country,
+        )
+
+    if region:
+        base_stmt = base_stmt.where(
+            Region.name == region,
+        )
+
+    if country_id is not None:
+        base_stmt = base_stmt.where(
+            Wine.country_id == country_id,
+        )
+
+    if region_id is not None:
+        base_stmt = base_stmt.where(
+            Wine.region_id == region_id,
+        )
+
+    if wine_type_id is not None:
+        base_stmt = base_stmt.where(
+            Wine.wine_type_id == wine_type_id,
+        )
+
+    total_result = await session.execute(
+        select(func.count()).select_from(
+            base_stmt.subquery(),
+        )
+    )
+
     total = total_result.scalar_one() or 0
 
     stmt = (
-        select(Wine, Country, Region, WineType, TasteProfile)
-        .join(Country, Country.id == Wine.country_id, isouter=True)
-        .join(Region, Region.id == Wine.region_id, isouter=True)
-        .join(WineType, WineType.id == Wine.wine_type_id, isouter=True)
-        .join(TasteProfile, TasteProfile.id == Wine.taste_profile_id, isouter=True)
+        select(
+            Wine,
+            Country,
+            Region,
+            WineType,
+            TasteProfile,
+
+            func.coalesce(
+                taste_stats.c.taste_votes_count,
+                0,
+            ).label("taste_votes_count"),
+
+            taste_stats.c.taste_average,
+
+            func.coalesce(
+                comment_stats.c.comments_count,
+                0,
+            ).label("comments_count"),
+
+            comment_stats.c.rating_average,
+        )
+        .join(
+            Country,
+            Country.id == Wine.country_id,
+            isouter=True,
+        )
+        .join(
+            Region,
+            Region.id == Wine.region_id,
+            isouter=True,
+        )
+        .join(
+            WineType,
+            WineType.id == Wine.wine_type_id,
+            isouter=True,
+        )
+        .join(
+            TasteProfile,
+            TasteProfile.id == Wine.taste_profile_id,
+            isouter=True,
+        )
+        .outerjoin(
+            taste_stats,
+            taste_stats.c.wine_id == Wine.id,
+        )
+        .outerjoin(
+            comment_stats,
+            comment_stats.c.wine_id == Wine.id,
+        )
+        .outerjoin(
+            offer_stats,
+            offer_stats.c.wine_id == Wine.id,
+        )
     )
 
-    if country_id is not None:
-        stmt = stmt.where(Wine.country_id == country_id)
-    if region_id is not None:
-        stmt = stmt.where(Wine.region_id == region_id)
-    if wine_type_id is not None:
-        stmt = stmt.where(Wine.wine_type_id == wine_type_id)
+    if search and search.strip():
+        stmt = stmt.where(
+            Wine.name.ilike(
+                f"%{search.strip()}%",
+            )
+        )
 
-    stmt = stmt.order_by(Wine.id).offset(offset).limit(limit)
+    if country:
+        stmt = stmt.where(
+            Country.name == country,
+        )
+
+    if region:
+        stmt = stmt.where(
+            Region.name == region,
+        )
+
+    if country_id is not None:
+        stmt = stmt.where(
+            Wine.country_id == country_id,
+        )
+
+    if region_id is not None:
+        stmt = stmt.where(
+            Wine.region_id == region_id,
+        )
+
+    if wine_type_id is not None:
+        stmt = stmt.where(
+            Wine.wine_type_id == wine_type_id,
+        )
+
+    sort_columns = {
+        "year": Wine.year,
+        "alcohol": Wine.alc_perc,
+        "volume": Wine.capacity_ml,
+
+        "comments": comment_stats.c.comments_count,
+        "rating": comment_stats.c.rating_average,
+
+        "body": taste_stats.c.body_average,
+        "tannin": taste_stats.c.tannin_average,
+        "sweetness": taste_stats.c.sweetness_average,
+        "acidity": taste_stats.c.acidity_average,
+
+        "price": offer_stats.c.best_price,
+    }
+
+    if sort:
+        sort_key, _, sort_direction = sort.partition("-")
+        sort_column = sort_columns.get(sort_key)
+
+        if sort_column is not None:
+            if sort_direction == "asc":
+                stmt = stmt.order_by(
+                    sort_column.asc().nullslast(),
+                    Wine.id.asc(),
+                )
+            else:
+                stmt = stmt.order_by(
+                    sort_column.desc().nullslast(),
+                    Wine.id.asc(),
+                )
+        else:
+            stmt = stmt.order_by(Wine.id.asc())
+    else:
+        stmt = stmt.order_by(Wine.id.asc())
+
+    stmt = (
+        stmt
+        .offset(offset)
+        .limit(limit)
+    )
 
     result = await session.execute(stmt)
     rows = result.all()
@@ -748,24 +991,66 @@ async def admin_list_wines(
             year=wine.year,
             alc_perc=wine.alc_perc,
             capacity_ml=wine.capacity_ml,
+
             country_id=wine.country_id,
             region_id=wine.region_id,
             wine_type_id=wine.wine_type_id,
             taste_profile_id=wine.taste_profile_id,
-            country=country.name if country else None,
-            region=region.name if region else None,
-            wine_type=wine_type.name if wine_type else None,
-            taste_profile=taste_profile.name if taste_profile else None,
-            taste_votes_count=None,
-            taste_average=None,
-            comments_count=None,
-            rating_average=None,
+
+            country=(
+                country_row.name
+                if country_row
+                else None
+            ),
+            region=(
+                region_row.name
+                if region_row
+                else None
+            ),
+            wine_type=(
+                wine_type_row.name
+                if wine_type_row
+                else None
+            ),
+            taste_profile=(
+                taste_profile_row.name
+                if taste_profile_row
+                else None
+            ),
+
+            taste_votes_count=int(
+                taste_votes_count,
+            ),
+            taste_average=(
+                float(taste_average)
+                if taste_average is not None
+                else None
+            ),
+
+            comments_count=int(comments_count),
+            rating_average=(
+                float(rating_average)
+                if rating_average is not None
+                else None
+            ),
         )
-        for wine, country, region, wine_type, taste_profile in rows
+        for (
+            wine,
+            country_row,
+            region_row,
+            wine_type_row,
+            taste_profile_row,
+            taste_votes_count,
+            taste_average,
+            comments_count,
+            rating_average,
+        ) in rows
     ]
 
-    return PaginatedWineRows(items=items, total=total)
-
+    return PaginatedWineRows(
+        items=items,
+        total=total,
+    )
 @router.get("/wines/{wine_id}", response_model=WineRead)
 async def admin_get_wine(
     wine_id: int,
