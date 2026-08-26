@@ -296,6 +296,32 @@ async def get_similar_wines(
     if not base_wine:
         raise HTTPException(status_code=404, detail="Wine not found")
 
+    rating_stats = (
+        select(
+            WineComment.wine_id.label("wine_id"),
+            cast(
+                func.avg(WineComment.rating),
+                Float,
+            ).label("rating"),
+            func.count(WineComment.id).label(
+                "ratings_count",
+            ),
+        )
+        .group_by(WineComment.wine_id)
+        .subquery()
+    )
+
+    offer_stats = (
+        select(
+            RetailerWine.wine_id.label("wine_id"),
+            func.min(RetailerWine.price).label(
+                "best_price",
+            ),
+        )
+        .group_by(RetailerWine.wine_id)
+        .subquery()
+    )
+
     country_id = base_wine.country_id
     wine_type_id = base_wine.wine_type_id
     taste_profile_id = base_wine.taste_profile_id
@@ -309,11 +335,45 @@ async def get_similar_wines(
     base_grapes = {name for (name,) in res_g.all()}
 
     stmt = (
-        select(Wine, Country, Region, WineType, TasteProfile)
+        select(
+            Wine,
+            Country,
+            Region,
+            WineType,
+            TasteProfile,
+
+            rating_stats.c.rating,
+
+            func.coalesce(
+                rating_stats.c.ratings_count,
+                0,
+            ).label("ratings_count"),
+
+            offer_stats.c.best_price,
+        )
         .join(Country, Country.id == Wine.country_id)
-        .join(Region, Region.id == Wine.region_id, isouter=True)
-        .join(WineType, WineType.id == Wine.wine_type_id)
-        .join(TasteProfile, TasteProfile.id == Wine.taste_profile_id, isouter=True)
+        .join(
+            Region,
+            Region.id == Wine.region_id,
+            isouter=True,
+        )
+        .join(
+            WineType,
+            WineType.id == Wine.wine_type_id,
+        )
+        .join(
+            TasteProfile,
+            TasteProfile.id == Wine.taste_profile_id,
+            isouter=True,
+        )
+        .outerjoin(
+            rating_stats,
+            rating_stats.c.wine_id == Wine.id,
+        )
+        .outerjoin(
+            offer_stats,
+            offer_stats.c.wine_id == Wine.id,
+        )
         .where(Wine.country_id == country_id)
         .where(Wine.wine_type_id == wine_type_id)
         .where(Wine.id != wine_id)
@@ -322,57 +382,135 @@ async def get_similar_wines(
     res = await session.execute(stmt)
     rows = res.all()
 
-
-
     def norm_name(s: str) -> str:
         return " ".join(str(s).lower().split())
 
     base_name = norm_name(base_wine.name)
 
-    scored = []
-    for wine, country, region, wt, taste in rows:
-        stmt_cg = (
+    scored: list[
+        tuple[
+            float,
+            Wine,
+            Country,
+            Region | None,
+            WineType,
+            TasteProfile | None,
+            float | None,
+            int,
+            float | None,
+        ]
+    ] = []
+
+    for (
+        wine,
+        country,
+        region,
+        wine_type,
+        taste_profile,
+        rating,
+        ratings_count,
+        best_price,
+    ) in rows:
+        stmt_candidate_grapes = (
             select(Grape.name)
-            .join(WineGrapeLink, WineGrapeLink.grape_id == Grape.id)
-            .where(WineGrapeLink.wine_id == wine.id)
-        )
-        res_cg = await session.execute(stmt_cg)
-        cand_grapes = {name for (name,) in res_cg.all()}
-
-        common_grapes = base_grapes.intersection(cand_grapes)
-        grape_score = len(common_grapes)
-
-        taste_score = 1 if taste and taste.id == taste_profile_id else 0
-
-        name_score = fuzz.partial_ratio(base_name, norm_name(wine.name))
-
-        total_score = grape_score * 3 + taste_score * 2 + name_score / 20.0
-
-        scored.append(
-            (total_score, wine, country, region, wt, taste)
-        )
-
-    scored.sort(key=lambda x: x[0], reverse=True)
-    top = scored[:limit]
-
-
-    similar: List[WineListItem] = []
-    for score, wine, country, region, wt, taste in top:
-        similar.append(
-            WineListItem(
-                id=wine.id,
-                name=wine.name,
-                country=country.name,
-                region=region.name if region else None,
-                rating=None,
-                ratings_count=None,
-                best_price=None,
-                offers=[],
+            .join(
+                WineGrapeLink,
+                WineGrapeLink.grape_id == Grape.id,
+            )
+            .where(
+                WineGrapeLink.wine_id == wine.id,
             )
         )
 
-    return similar
+        candidate_grapes_result = await session.execute(
+            stmt_candidate_grapes,
+        )
 
+        candidate_grapes = {
+            name
+            for (name,) in candidate_grapes_result.all()
+        }
+
+        common_grapes = base_grapes.intersection(
+            candidate_grapes,
+        )
+
+        grape_score = len(common_grapes)
+
+        taste_score = (
+            1
+            if (
+                taste_profile
+                and taste_profile.id == taste_profile_id
+            )
+            else 0
+        )
+
+        name_score = fuzz.partial_ratio(
+            base_name,
+            norm_name(wine.name),
+        )
+
+        total_score = (
+            grape_score * 3
+            + taste_score * 2
+            + name_score / 20.0
+        )
+
+        scored.append(
+            (
+                total_score,
+                wine,
+                country,
+                region,
+                wine_type,
+                taste_profile,
+                float(rating)
+                if rating is not None
+                else None,
+                int(ratings_count),
+                float(best_price)
+                if best_price is not None
+                else None,
+            )
+        )
+
+    scored.sort(
+        key=lambda item: item[0],
+        reverse=True,
+    )
+
+    top = scored[:limit]
+
+    return [
+        WineListItem(
+            id=wine.id,
+            name=wine.name,
+            country=country.name,
+            region=(
+                region.name
+                if region
+                else None
+            ),
+
+            rating=rating,
+            ratings_count=ratings_count,
+            best_price=best_price,
+
+            offers=[],
+        )
+        for (
+            _score,
+            wine,
+            country,
+            region,
+            _wine_type,
+            _taste_profile,
+            rating,
+            ratings_count,
+            best_price,
+        ) in top
+    ]
 
 @router.get("/{wine_id}/detail", response_model=WineDetail)
 async def get_wine_detail(
