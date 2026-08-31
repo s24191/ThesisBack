@@ -93,9 +93,5 @@ class Wine(Base, table=True):
     taste_votes: list["WineTasteVote"] = Relationship(back_populates="wine")
     followers: list["WineFollow"] = Relationship(back_populates="wine")
     grapes_link: list[WineGrapeLink] = Relationship(back_populates="wine")
-    retailer_offers: list[RetailerWine] = Relationship(
-        back_populates="wine"
-    )
-    comments: list[WineComment] = Relationship(  # NEW
-        back_populates="wine"
-    )
+    retailer_offers: list[RetailerWine] = Relationship(  back_populates="wine")
+    comments: list[WineComment] = Relationship(     back_populates="wine")

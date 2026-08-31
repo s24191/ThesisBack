@@ -1,7 +1,9 @@
+from typing import List
+
 from datetime import datetime, timezone
 from sqlalchemy import Column, DateTime
 from uuid import UUID, uuid4
-from sqlmodel import SQLModel, Field
+from sqlmodel import SQLModel, Field, Relationship
 from fastapi_users_db_sqlmodel import SQLModelBaseUserDB
 
 
@@ -25,6 +27,10 @@ class User(SQLModelBaseUserDB, SQLModel, table=True):
 
     filter_setting: str | None = Field(default=None)
     filter_active: bool = Field(default=False)
+
+    wine_comments: List["WineComment"] = Relationship(back_populates="author")
+    taste_votes: List["WineTasteVote"] = Relationship(back_populates="user")
+
 
     model_config = {
         "arbitrary_types_allowed": True,

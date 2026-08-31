@@ -2,12 +2,14 @@ from uuid import UUID
 from datetime import datetime
 
 from sqlmodel import SQLModel, Field, Relationship, UniqueConstraint
+
+from shared.models import Wine, User
 from shared.models.base import Base
 
 
 class WineTasteVoteBase(SQLModel):
     wine_id: int = Field(foreign_key="wine.id", index=True)
-    user_id: UUID = Field(index=True)
+    user_id: UUID = Field(foreign_key="users.id", index=True)
 
     body: int = Field(ge=0, le=10)
     tannin: int = Field(ge=0, le=10)
@@ -23,3 +25,4 @@ class WineTasteVote(WineTasteVoteBase, Base, table=True):
     )
 
     wine: "Wine" = Relationship(back_populates="taste_votes")
+    user: "User" = Relationship(back_populates="taste_votes")
