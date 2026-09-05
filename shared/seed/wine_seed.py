@@ -1,10 +1,10 @@
 import csv
 from dataclasses import dataclass
+from datetime import datetime
 from io import StringIO
-from typing import Any
-
 from sqlmodel import delete, select
 from sqlmodel.ext.asyncio.session import AsyncSession
+from typing import Any
 
 from shared.models.wine import (
     Country,
@@ -63,15 +63,7 @@ def parse_optional_float(value: str | None) -> float | None:
 
 
 def parse_available(value: str | None) -> bool:
-    if not value:
-        return False
-
-    return value.strip().lower() in {
-        "true",
-        "1",
-        "yes",
-        "available",
-    }
+    return (value or "").strip().lower() == "true"
 
 
 def get_required_value(
@@ -256,7 +248,7 @@ async def upsert_offer_from_row(
     image_url = (row.get("image_url") or "").strip() or None
     available = parse_available(row.get("available"))
     grape_names = parse_grapes(row.get("grapes"))
-
+    checked_at = datetime.utcnow()
     offer_result = await session.execute(
         select(RetailerWine, Wine)
         .join(
@@ -285,7 +277,7 @@ async def upsert_offer_from_row(
         offer.price = price or 0.0
         offer.available = available
         offer.image_url = image_url
-
+        offer.last_update = checked_at
         await replace_wine_grapes(
             session,
             wine_id=wine.id,
@@ -324,6 +316,7 @@ async def upsert_offer_from_row(
         available=available,
         url=url,
         image_url=image_url,
+        last_update=checked_at,
     )
     session.add(offer)
 

@@ -2,7 +2,7 @@ from typing import Optional, List
 from sqlmodel import SQLModel, Field, Relationship
 from shared.models.base import Base
 from shared.models.comment import WineComment
-
+from datetime import datetime
 
 class Country(Base, table=True):
     name: str = Field(index=True, unique=True)
@@ -56,7 +56,7 @@ class RetailerWine(Base, table=True):
     wine_id: int = Field(foreign_key="wine.id", index=True)
 
     price: float
-    last_update: Optional[str] = None  # later: datetime
+    last_update: datetime = Field(default_factory=datetime.utcnow)
     available: bool = Field(default=True)
     url: str
 

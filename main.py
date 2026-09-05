@@ -8,14 +8,14 @@ from shared.auth.user_binding import fastapi_users, auth_backend
 from shared.database import init_db
 from shared.schemas.user import UserRead, UserCreate, UserUpdate
 from fastapi.middleware.cors import CORSMiddleware
-from features.wines.wine_endpoints import router as wines_router
-from features.wines.wine_comments_endpoints import router as wine_comments_router
-from features.wines.wine_follows_endpoints import router as wine_follows_router
-from features.wines.wine_taste_endpoints import router as wine_taste_router
-from features.wines.wine_notes_endpoints import router as wine_notes_router
-from features.users.admin_endpoints import router as admin_router
-from features.users.scraping_endpoints import router as scraping_router
-from features.users.translation_reviews import router as translation_router
+from features.wines.endpoints import router as wines_router
+from features.wines.comments.wine_comments_endpoints import router as wine_comments_router
+from features.wines.follows.wine_follows_endpoints import router as wine_follows_router
+from features.wines.taste_votes.wine_taste_endpoints import router as wine_taste_router
+from features.wines.notes.wine_notes_endpoints import router as wine_notes_router
+from features.administration.lookups.endpoints import router as admin_router
+from features.collection.workflow.endpoints import router as scraping_router
+from features.administration.translation_reviews.endpoints import router as translation_router
 
 import os
 
