@@ -40,7 +40,7 @@ async def list_regions(
 
 
 @router.get(
-    "/",
+    "",
     response_model=List[WineDetail],
 )
 async def list_wines(
