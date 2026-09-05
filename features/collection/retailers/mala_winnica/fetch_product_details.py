@@ -248,11 +248,7 @@ def get_price_text(
 def parse_available(
     soup: BeautifulSoup,
 ) -> bool:
-    """
-    cannot be determined reliably without JavaScript.
 
-    will be treated as avaliable on the backend for now
-    """
     return True
 def get_image_url(
     soup: BeautifulSoup,
