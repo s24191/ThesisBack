@@ -6,7 +6,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from thefuzz import fuzz
 
 from features.wines.schemas import WineDetail, WineOffer, WineListItem
-from shared.models import WineComment
+from shared.models import WineComment, WineTasteVote
 from shared.models.wine import (
     Country,
     Grape,
@@ -50,11 +50,38 @@ def build_offer_stats():
             ).filter(
                 RetailerWine.available.is_(True)
             ).label("best_price"),
+            func.count(
+                RetailerWine.id
+            ).label("retailer_count"),
         )
         .group_by(RetailerWine.wine_id)
         .subquery()
     )
 
+def build_taste_stats():
+    return (
+        select(
+            WineTasteVote.wine_id.label("wine_id"),
+            cast(
+                func.avg(WineTasteVote.body),
+                Float,
+            ).label("body_average"),
+            cast(
+                func.avg(WineTasteVote.tannin),
+                Float,
+            ).label("tannin_average"),
+            cast(
+                func.avg(WineTasteVote.sweetness),
+                Float,
+            ).label("sweetness_average"),
+            cast(
+                func.avg(WineTasteVote.acidity),
+                Float,
+            ).label("acidity_average"),
+        )
+        .group_by(WineTasteVote.wine_id)
+        .subquery()
+    )
 
 async def list_country_names(
     session: AsyncSession,
@@ -97,6 +124,7 @@ async def list_wine_cards(
 ) -> list[WineDetail]:
     rating_stats = build_rating_stats()
     offer_stats = build_offer_stats()
+    taste_stats = build_taste_stats()
 
     statement = (
         select(
@@ -115,6 +143,10 @@ async def list_wine_cards(
                 False,
             ).label("available"),
             offer_stats.c.best_price,
+            func.coalesce(
+                offer_stats.c.retailer_count,
+                0,
+            ).label("retailer_count"),
         )
         .join(
             Country,
@@ -137,6 +169,10 @@ async def list_wine_cards(
             rating_stats.c.wine_id == Wine.id,
         )
         .outerjoin(
+            taste_stats,
+            taste_stats.c.wine_id == Wine.id,
+        )
+        .outerjoin(
             offer_stats,
             offer_stats.c.wine_id == Wine.id,
         )
@@ -153,23 +189,71 @@ async def list_wine_cards(
     if region:
         statement = statement.where(Region.name == region)
 
-    if sort == "rating-desc":
+    sort_columns = {
+        "year": Wine.year,
+        "alcohol": Wine.alc_perc,
+        "volume": Wine.capacity_ml,
+        "comments": func.coalesce(
+            rating_stats.c.ratings_count,
+            0,
+        ),
+        "rating": rating_stats.c.rating,
+        "body": taste_stats.c.body_average,
+        "tannin": taste_stats.c.tannin_average,
+        "sweetness": taste_stats.c.sweetness_average,
+        "acidity": taste_stats.c.acidity_average,
+        "price": offer_stats.c.best_price,
+    }
+
+    order_by_columns = []
+
+    if sort:
+        for sort_entry in sort.split(","):
+            sort_key, separator, sort_direction = (
+                sort_entry.strip().partition("-")
+            )
+
+            if separator != "-":
+                continue
+
+            sort_column = sort_columns.get(sort_key)
+
+            if (
+                    sort_column is None
+                    or sort_direction not in {"asc", "desc"}
+            ):
+                continue
+
+            if sort_direction == "asc":
+                order_by_columns.append(
+                    sort_column.asc().nullslast()
+                )
+            else:
+                order_by_columns.append(
+                    sort_column.desc().nullslast()
+                )
+
+    if order_by_columns:
         statement = statement.order_by(
-            rating_stats.c.rating.desc().nullslast(),
-            Wine.id.asc(),
-        )
-    elif sort == "price-asc":
-        statement = statement.order_by(
-            offer_stats.c.best_price.asc().nullslast(),
-            Wine.id.asc(),
-        )
-    elif sort == "price-desc":
-        statement = statement.order_by(
-            offer_stats.c.best_price.desc().nullslast(),
-            Wine.id.asc(),
+            *order_by_columns,
+            Wine.id.desc(),
         )
     else:
-        statement = statement.order_by(Wine.id.desc())
+        statement = statement.order_by(
+            (
+                    func.coalesce(
+                        offer_stats.c.retailer_count,
+                        0,
+                    )
+                    >= 2
+            ).desc(),
+            func.coalesce(
+                offer_stats.c.retailer_count,
+                0,
+            ).desc(),
+            offer_stats.c.best_price.asc().nullslast(),
+            Wine.id.desc(),
+        )
 
     statement = statement.offset(offset).limit(limit)
 
@@ -188,6 +272,7 @@ async def list_wine_cards(
             _ratings_count,
             _available,
             _best_price,
+            _retailer_count,
         ) in wine_rows
     ]
 
@@ -288,6 +373,7 @@ async def list_wine_cards(
             ratings_count,
             available,
             best_price,
+            _retailer_count,
         ) in wine_rows
     ]
 
